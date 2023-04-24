@@ -1,44 +1,10 @@
 from fastapi import APIRouter, HTTPException
-from enum import Enum
 from fastapi.params import Query
 from src import database as db
 
 router = APIRouter()
 
 
-@router.get("/conversations/{id}", tags=["lines"])
-def get_conversation(id: int):
-    """
-    This endpoint returns a full conversation. Each conversation includes
-    * 'conversation_id': id of the convo
-    * 'movie_id': id of the movie
-    * 'movie_title': title of the movie
-    * 'lines' all the lines in the conversation
-
-    Lines follow this structure
-    * 'character_name': the name of the character speaking
-    * 'line': the full text of the line
-    """
-    json = None
-    lines = []
-
-    if id in db.conversations:
-        conversation = db.conversations[id]
-        for line_id in conversation.line_ids:
-            lines.append({
-                'character_name': db.characters[db.lines[line_id].character_id].name,
-                'line': db.lines[line_id].line_text
-            })
-        json = {
-            "conversation_id": id,
-            "movie_id": conversation.movie_id,
-            "movie_title": db.movies[conversation.movie_id].title,
-            "lines": lines
-        }
-
-    if json is None:
-        raise HTTPException(status_code=404, detail="conversation not found.")
-    return json
 
 
 @router.get("/lines/{id}", tags=["lines"])
@@ -53,6 +19,8 @@ def get_line(
         * 'conversation_id': the id of the conversation in which this line takes place
         * 'line': the full text of the line
         """
+    db.sync_if_needed()
+
     if id in db.lines:
         line = db.lines[id]
         spoken_to = db.conversations[line.conversation_id].character2_id
@@ -90,6 +58,7 @@ def get_lines(
     maximum number of results to return. The `offset` query parameter specifies the
     number of results to skip before returning results.
     """
+    db.sync_if_needed()
 
     json = []
     if character:

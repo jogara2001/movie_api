@@ -27,6 +27,7 @@ def get_character(id: int):
     * `number_of_lines_together`: The number of lines the character has with the
       originally queried character.
     """
+    db.sync_if_needed()
     json = None
 
     if id in db.characters:
@@ -99,7 +100,7 @@ def list_characters(
     maximum number of results to return. The `offset` query parameter specifies the
     number of results to skip before returning results.
     """
-
+    db.sync_if_needed()
     json = []
     if name:
         items = list(filter(lambda character: name.upper() in character.name.upper(), db.characters.values()))

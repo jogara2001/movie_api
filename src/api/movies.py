@@ -22,6 +22,7 @@ def get_movie(movie_id: int):
     * `num_lines`: The number of lines the character has in the movie.
 
     """
+    db.sync_if_needed()
     json = None
 
     if movie_id in db.movies:
@@ -86,6 +87,7 @@ def list_movies(
     maximum number of results to return. The `offset` query parameter specifies the
     number of results to skip before returning results.
     """
+    db.sync_if_needed()
     json = []
     if name:
         items = list(filter(lambda movie: name.upper() in movie.title.upper(), db.movies.values()))
