@@ -14,6 +14,12 @@ def test_get_movie():
     with open("test/movies/44.json", encoding="utf-8") as f:
         assert response.json() == json.load(f)
 
+def test_get_movie_2():
+    response = client.get("/movies/267")
+    assert response.status_code == 200
+
+    with open("test/movies/267.json", encoding="utf-8") as f:
+        assert response.json() == json.load(f)
 
 def test_movies():
     response = client.get("/movies/")
@@ -42,18 +48,15 @@ def test_sort_filter():
     ) as f:
         assert response.json() == json.load(f)
 
-# New test case
-def test_sort_filter2():
-    # Tests going past end of db
-    response = client.get("/movies/?limit=250&offset=200&sort=year")
+def test_sort_year_offset():
+    response = client.get("/movies/?limit=100&offset=40&sort=year")
     assert response.status_code == 200
 
     with open(
-        "test/movies/limit=250&offset=200&sort=year.json",
-        encoding="utf-8",
+        "test/movies/movies-limit=100&offset=40&sort=year.json",
+        encoding="utf-8"
     ) as f:
         assert response.json() == json.load(f)
-
 
 def test_404():
     response = client.get("/movies/1")

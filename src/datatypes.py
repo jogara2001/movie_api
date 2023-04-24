@@ -8,33 +8,36 @@ class Character:
     movie_id: int
     gender: str
     age: int
-    num_lines: int
+    line_ids: []
+    conversation_ids: []
 
 
 @dataclass
 class Movie:
     id: int
     title: str
-    year: int
+    year: str
     imdb_rating: float
     imdb_votes: int
     raw_script_url: str
+    conversation_ids: []
+    character_ids: []
 
 
 @dataclass
 class Conversation:
     id: int
-    c1_id: int
-    c2_id: int
+    character1_id: int
+    character2_id: int
     movie_id: int
-    num_lines: int
+    line_ids: []
 
 
 @dataclass
 class Line:
     id: int
-    c_id: int
+    character_id: int
     movie_id: int
-    conv_id: int
+    conversation_id: int
     line_sort: int
     line_text: str
