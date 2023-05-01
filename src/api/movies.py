@@ -1,3 +1,4 @@
+import sqlalchemy
 from fastapi import APIRouter, HTTPException
 from enum import Enum
 from fastapi.params import Query
@@ -22,7 +23,6 @@ def get_movie(movie_id: int):
     * `num_lines`: The number of lines the character has in the movie.
 
     """
-    db.sync_if_needed()
     json = None
 
     if movie_id in db.movies:
@@ -87,27 +87,44 @@ def list_movies(
     maximum number of results to return. The `offset` query parameter specifies the
     number of results to skip before returning results.
     """
-    db.sync_if_needed()
-    json = []
-    if name:
-        items = list(filter(lambda movie: name.upper() in movie.title.upper(), db.movies.values()))
+    if sort is movie_sort_options.movie_title:
+        order_by = db.movies.c.title
+    elif sort is movie_sort_options.year:
+        order_by = db.movies.c.year
+    elif sort is movie_sort_options.rating:
+        order_by = sqlalchemy.desc(db.movies.c.imdb_rating)
     else:
-        items = list(db.movies.values())
+        assert False
 
-    if sort == movie_sort_options.movie_title:
-        items = sorted(items, key=lambda movie: movie.title)
-    if sort == movie_sort_options.year:
-        items = sorted(items, key=lambda movie: movie.year)
-    if sort == movie_sort_options.rating:
-        items = sorted(items, key=lambda movie: movie.imdb_rating, reverse=True)
+    stmt = (
+        sqlalchemy.select(
+            db.movies.c.movie_id,
+            db.movies.c.title,
+            db.movies.c.year,
+            db.movies.c.imdb_rating,
+            db.movies.c.imdb_votes,
+        )
+        .limit(limit)
+        .offset(offset)
+        .order_by(order_by, db.movies.c.movie_id)
+    )
 
-    for movie in items[offset: offset + limit]:
-        json.append({
-            "movie_id": movie.id,
-            "movie_title": movie.title,
-            "year": str(movie.year),
-            "imdb_rating": movie.imdb_rating,
-            "imdb_votes": movie.imdb_votes,
-        })
+    # filter only if name parameter is passed
+    if name != "":
+        stmt = stmt.where(db.movies.c.title.ilike(f"%{name}%"))
+
+    with db.engine.connect() as conn:
+        result = conn.execute(stmt)
+        json = []
+        for row in result:
+            json.append(
+                {
+                    "movie_id": row.movie_id,
+                    "movie_title": row.title,
+                    "year": row.year,
+                    "imdb_rating": row.imdb_rating,
+                    "imdb_votes": row.imdb_votes,
+                }
+            )
 
     return json
