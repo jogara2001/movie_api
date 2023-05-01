@@ -2,6 +2,7 @@ import sqlalchemy
 from fastapi import APIRouter, HTTPException
 from enum import Enum
 from fastapi.params import Query
+
 from src import database as db
 
 router = APIRouter()
@@ -25,28 +26,53 @@ def get_movie(movie_id: int):
     """
     json = None
 
-    if movie_id in db.movies:
-        movie = db.movies[movie_id]
+    stmt1 = (
+        sqlalchemy.select(
+            db.movies.c.movie_id,
+            db.movies.c.title,
+        )
+        .where(
+            db.movies.c.movie_id == movie_id
+        )
+    )
+
+    stmt2 = (
+        sqlalchemy.select(
+            db.characters.c.character_id,
+            db.characters.c.name,
+            sqlalchemy.func.count(db.lines.c.character_id).label("num_lines")
+        )
+        .select_from(db.characters.join(db.lines))
+        .where(
+            db.characters.c.movie_id == movie_id
+        )
+        .order_by(
+            sqlalchemy.desc("num_lines")
+        )
+        .group_by(
+            db.characters.c.character_id
+        )
+    )
+
+    with db.engine.connect() as conn:
+        movie_result = conn.execute(stmt1).fetchone()
+        if movie_result is None:
+            raise HTTPException(status_code=404, detail="movie not found.")
+
+        characters_result = conn.execute(stmt2)
         top_characters = []
-
-        sorted_characters = sorted(movie.character_ids, key=lambda chid: len(db.characters[chid].line_ids), reverse=True)
-        for character_id in sorted_characters:
+        for character in characters_result:
             top_characters.append({
-                "character_id": character_id,
-                "character": db.characters[character_id].name,
-                "num_lines": len(db.characters[character_id].line_ids)
+                "character_id": character.character_id,
+                "character": character.name,
+                "num_lines": character.num_lines
+
             })
-            if len(top_characters) >= 5:
-                break
-
         json = {
-            "movie_id": movie_id,
-            "title": movie.title,
-            "top_characters": top_characters
+            "movie_id": movie_result.movie_id,
+            "title": movie_result.title,
+            "top_characters": top_characters[:5]
         }
-
-    if json is None:
-        raise HTTPException(status_code=404, detail="movie not found.")
 
     return json
 
