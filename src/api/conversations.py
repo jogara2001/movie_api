@@ -1,5 +1,6 @@
 from uuid import uuid4
 
+import sqlalchemy
 from fastapi import APIRouter, HTTPException
 from src import database as db
 from pydantic import BaseModel
@@ -42,47 +43,6 @@ def add_conversation(movie_id: int, conversation: ConversationJson):
     The endpoint returns the id of the resulting conversation that was created.
     """
 
-    # There are some serious race condition concerns here. If there's a write any time
-    # after the sync but before this function finishes, it could cause issues. With this
-    # implementation that means that the first write would be removed. There are also some
-    # more drawbacks detailed in database.py
-    # This implementation only really works for a few clients making few write calls
-    db.sync_if_needed()
-
-    if movie_id not in db.movies:
-        raise HTTPException(status_code=404, detail="movie not found.")
-    if conversation.character_1_id not in db.characters or db.characters[conversation.character_1_id].movie_id != movie_id:
-        raise HTTPException(status_code=404, detail="character 1 not found.")
-    if conversation.character_2_id not in db.characters or db.characters[conversation.character_2_id].movie_id != movie_id:
-        raise HTTPException(status_code=404, detail="character 2 not found.")
-
-
-    convo = Conversation(
-        id=uuid4().int,
-        character1_id=conversation.character_1_id,
-        character2_id=conversation.character_2_id,
-        movie_id=movie_id,
-        line_ids=[]
-    )
-    lines = []
-    line_sort = 0
-    for line in conversation.lines:
-        newLine = Line(
-            id=uuid4().int,
-            character_id=line.character_id,
-            movie_id=movie_id,
-            conversation_id=convo.id,
-            line_sort=line_sort,
-            line_text=line.line_text
-        )
-        lines.append(newLine)
-        db.lines[newLine.id] = newLine
-        convo.line_ids.append(newLine.id)
-        line_sort += 1
-    db.conversations[convo.id] = convo
-    db.conversations_write_back(convo, lines)
-
-    return convo.id
 
 @router.get("/conversations/{id}", tags=["lines"])
 def get_conversation(id: int):
@@ -97,23 +57,47 @@ def get_conversation(id: int):
     * 'character_name': the name of the character speaking
     * 'line': the full text of the line
     """
-    json = None
-    lines = []
+    stmt1 = (
+        sqlalchemy.select(
+            db.conversations.c.conversation_id,
+            db.conversations.c.movie_id,
+            db.movies.c.title,
+        )
+        .select_from(db.conversations.join(db.movies))
+        .where(
+            db.conversations.c.conversation_id == id
+        )
+    )
 
-    if id in db.conversations:
-        conversation = db.conversations[id]
-        for line_id in conversation.line_ids:
-            lines.append({
-                'character_name': db.characters[db.lines[line_id].character_id].name,
-                'line': db.lines[line_id].line_text
+    stmt2 = (
+        sqlalchemy.select(
+            db.lines.c.line_text,
+            db.characters.c.character_id,
+            db.characters.c.name
+        )
+        .select_from(db.lines.join(db.characters))
+        .where(
+            db.lines.c.conversation_id == id
+        )
+    )
+
+    with db.engine.connect() as conn:
+        result = conn.execute(stmt1).fetchone()
+        if result is None:
+            raise HTTPException(status_code=404, detail="conversation not found.")
+
+        lines_result = conn.execute(stmt2)
+        all_lines = []
+        for line in lines_result:
+            all_lines.append({
+                "character_name": line.name,
+                "line": line.line_text
             })
-        json = {
-            "conversation_id": id,
-            "movie_id": conversation.movie_id,
-            "movie_title": db.movies[conversation.movie_id].title,
-            "lines": lines
+
+        return {
+            "conversation_id": result.conversation_id,
+            "movie_id": result.movie_id,
+            "movie_title": result.title,
+            "lines": all_lines
         }
 
-    if json is None:
-        raise HTTPException(status_code=404, detail="conversation not found.")
-    return json

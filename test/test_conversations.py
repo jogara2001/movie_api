@@ -60,3 +60,12 @@ def test_invalid_character():
 
     response = client.post("/movies/0/conversations/", json=inputJson)
     assert response.status_code == 404
+
+
+def test_get_conversation():
+    response = client.get("/conversations/25")
+    assert response.status_code == 200
+
+    with open("test/lines/conversation-25",
+              encoding="utf-8") as f:
+        assert response.json() == json.load(f)

@@ -1,10 +1,9 @@
+import sqlalchemy
 from fastapi import APIRouter, HTTPException
 from fastapi.params import Query
 from src import database as db
 
 router = APIRouter()
-
-
 
 
 @router.get("/lines/{id}", tags=["lines"])
@@ -19,23 +18,37 @@ def get_line(
         * 'conversation_id': the id of the conversation in which this line takes place
         * 'line': the full text of the line
         """
-    db.sync_if_needed()
 
-    if id in db.lines:
-        line = db.lines[id]
-        spoken_to = db.conversations[line.conversation_id].character2_id
-        if spoken_to == line.character_id:
-            spoken_to = db.conversations[line.conversation_id].character1_id
+    stmt = (
+        sqlalchemy.select(
+            db.lines.c.line_id,
+            db.movies.c.title,
+            db.lines.c.conversation_id,
+            db.lines.c.line_text,
+            db.characters.c.name
+        )
+        .select_from(
+            db.lines
+            .join(db.movies, db.movies.c.movie_id == db.lines.c.movie_id)
+            .join(db.characters, db.characters.c.character_id == db.lines.c.character_id)
+            .join(db.conversations, db.conversations.c.conversation_id == db.lines.c.conversation_id))
+        .where(
+            db.lines.c.line_id == id
+        )
+    )
+
+    with db.engine.connect() as conn:
+        result = conn.execute(stmt).fetchone()
+        if result is None:
+            raise HTTPException(status_code=404, detail="line not found.")
         return {
-            "movie": db.movies[line.movie_id].title,
-            "spoken_by": db.characters[line.character_id].name,
-            "spoken_to": db.characters[spoken_to].name,
-            "conversation_id": line.conversation_id,
-            "line": line.line_text
+            "movie": result.title,
+            "spoken_by": result.name,
+            # "spoken_to": result.other_character,
+            "conversation_id": result.conversation_id,
+            "line": result.line_text
 
         }
-    else:
-        raise HTTPException(status_code=404, detail="line not found")
 
 
 @router.get("/lines/", tags=["lines"])
@@ -58,25 +71,41 @@ def get_lines(
     maximum number of results to return. The `offset` query parameter specifies the
     number of results to skip before returning results.
     """
-    db.sync_if_needed()
+    stmt = (
+        sqlalchemy.select(
+            db.lines.c.line_id,
+            db.movies.c.title,
+            db.lines.c.line_text,
+            db.characters.c.name
+        )
+        .select_from(db.lines.join(db.characters).join(db.movies))
+        .limit(limit)
+        .offset(offset)
+        .order_by(db.lines.c.line_id, db.lines.c.line_sort)
+        .group_by(
+            db.lines.c.line_id,
+            db.movies.c.title,
+            db.characters.c.name,
+            db.lines.c.line_text
+        )
+    )
 
-    json = []
-    if character:
-        items = list(
-            filter(lambda line: character.upper() in db.characters[line.character_id].name.upper(), db.lines.values()))
-    else:
-        items = list(db.lines.values())
+    # filter only if name parameter is passed
+    if character != "":
+        stmt = stmt.where(db.characters.c.name.ilike(f"%{character}%"))
+    if movie != "":
+        stmt = stmt.where(db.movies.c.title.ilike(f"%{movie}%"))
 
-    if movie:
-        items = list(filter(lambda line: movie.upper() in db.movies[line.movie_id].title.upper(), items))
-
-    items = sorted(items, key=lambda line: (line.conversation_id, line.line_sort))
-
-    for line in items[offset: offset + limit]:
-        json.append({
-            "movie_title": db.movies[line.movie_id].title,
-            "character_name": db.characters[line.character_id].name,
-            "line": line.line_text
-        })
+    with db.engine.connect() as conn:
+        result = conn.execute(stmt)
+        json = []
+        for row in result:
+            json.append(
+                {
+                    "movie_title": row.title,
+                    "character_name": row.name,
+                    "line": row.line_text,
+                }
+            )
 
     return json

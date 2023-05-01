@@ -6,16 +6,6 @@ import json
 
 client = TestClient(app)
 
-
-def test_get_conversation():
-    response = client.get("/conversations/25")
-    assert response.status_code == 200
-
-    with open("test/lines/conversation-25",
-              encoding="utf-8") as f:
-        assert response.json() == json.load(f)
-
-
 def test_lines_movie_character_filter():
     response = client.get("/lines/?movie=watchmen&character=dr. manhattan")
     assert response.status_code == 200

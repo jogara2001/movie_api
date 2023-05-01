@@ -104,8 +104,6 @@ def get_character(id: int):
         )
     )
 
-
-
     with db.engine.connect() as conn:
         character_result = conn.execute(stmt1).fetchone()
         if character_result is None:
