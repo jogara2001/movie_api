@@ -46,8 +46,65 @@ def get_character(id: int):
         )
     )
 
-    characters_conversed_with = (
+    # gets conversation_id | character_id for all convos with id
+    conversations_shared = (
+        sqlalchemy.select(
+            db.conversations.c.conversation_id,
+            db.conversations.c.character1_id.label("character_id")
+        )
+        .where(
+            db.conversations.c.character2_id == id
+        )
+        .group_by(
+            db.conversations.c.conversation_id
+        )
+        .union(
+            sqlalchemy.select(
+                db.conversations.c.conversation_id,
+                db.conversations.c.character2_id.label("character_id")
+            )
+            .where(
+                db.conversations.c.character1_id == id
+            )
+            .group_by(
+                db.conversations.c.conversation_id
+            )
+        ).alias()
     )
+
+    lines_shared = (
+        sqlalchemy.select(
+            conversations_shared.c.character_id,
+            db.lines.c.line_id
+        )
+        .select_from(
+            db.lines.join(conversations_shared)
+        )
+        .group_by(
+            db.lines.c.line_id,
+            conversations_shared.c.character_id
+        ).alias()
+    )
+
+    stmt2 = (
+        sqlalchemy.select(
+            db.characters.c.character_id,
+            db.characters.c.name,
+            db.characters.c.gender,
+            sqlalchemy.func.count(lines_shared.c.character_id).label("number_of_lines_together")
+        )
+        .select_from(
+            db.characters.join(lines_shared)
+        )
+        .order_by(
+            sqlalchemy.desc("number_of_lines_together")
+        )
+        .group_by(
+            db.characters.c.character_id
+        )
+    )
+
+
 
     with db.engine.connect() as conn:
         character_result = conn.execute(stmt1).fetchone()
@@ -58,9 +115,17 @@ def get_character(id: int):
         top_conversations = []
         for character in conversations_result:
             top_conversations.append({
+                "character_id": character.character_id,
+                "character": character.name,
+                "gender": character.gender,
+                "number_of_lines_together": character.number_of_lines_together
             })
         json = {
-
+            "character_id": character_result.character_id,
+            "character": character_result.name,
+            "movie": character_result.title,
+            "gender": character_result.gender,
+            "top_conversations": top_conversations
         }
 
     return json
