@@ -43,7 +43,7 @@ def test_invalid_movie():
         ]
     }
     response = client.post("/movies/12346513245/conversations/", json=inputJson)
-    assert response.status_code == 404
+    assert response.status_code == 400
 
 
 def test_invalid_character():
@@ -59,7 +59,7 @@ def test_invalid_character():
     }
 
     response = client.post("/movies/0/conversations/", json=inputJson)
-    assert response.status_code == 404
+    assert response.status_code == 400
 
 
 def test_get_conversation():
