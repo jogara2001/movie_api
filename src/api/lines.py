@@ -14,7 +14,6 @@ def get_line(
         This endpoint returns a full line. Each line includes
         * 'movie': the movie it's from
         * 'spoken_by': the character that says the line
-        * 'spoken_to': the character that is spoken to
         * 'conversation_id': the id of the conversation in which this line takes place
         * 'line': the full text of the line
         """
@@ -44,7 +43,6 @@ def get_line(
         return {
             "movie": result.title,
             "spoken_by": result.name,
-            # "spoken_to": result.other_character,
             "conversation_id": result.conversation_id,
             "line": result.line_text
 
